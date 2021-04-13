@@ -3,10 +3,13 @@ from selenium.webdriver import Chrome, ChromeOptions
 import time
 import pandas as pd
 import datetime
+from selenium.webdriver.chrome.webdriver import WebDriver
+from selenium.webdriver.remote.webelement import WebElement
+from webdriver_manager.chrome import ChromeDriverManager
 
-LOG_FILE_PATH = "./log/log_###DATETIME###.log"
-EXP_CSV_PATH="./exp_list_###SEARCH_KEYWORD###_###DATETIME###.csv"
-log_file_path=LOG_FILE_PATH.replace("###DATETIME###",datetime.datetime.now().strftime('%Y-%m-%d-%H-%M-%S'))
+LOG_FILE_PATH = "./log/log_{datetime}.log"
+EXP_CSV_PATH="./exp_list_{search_keyword}_{datetime}.csv"
+log_file_path=LOG_FILE_PATH.format(datetime=datetime.datetime.now().strftime('%Y-%m-%d-%H-%M-%S'))
 
 ### Chromeを起動する関数
 def set_driver(driver_path, headless_flg):
@@ -26,7 +29,7 @@ def set_driver(driver_path, headless_flg):
     options.add_argument('--incognito')          # シークレットモードの設定を付与
 
     # ChromeのWebDriverオブジェクトを作成する。
-    return Chrome(executable_path=os.getcwd() + "/" + driver_path, options=options)
+    return Chrome(ChromeDriverManager().install(), options=options)
 
 ### ログファイルおよびコンソール出力
 def log(txt):
@@ -36,6 +39,12 @@ def log(txt):
     with open(log_file_path, 'a', encoding='utf-8_sig') as f:
         f.write(logStr + '\n')
     print(logStr)
+
+def find_table_target_word(th_elms, td_elms, target:str):
+    # tableのthからtargetの文字列を探し一致する行のtdを返す
+    for th_elm,td_elm in zip(th_elms,td_elms):
+        if th_elm.text == target:
+            return td_elm.text
 
 ### main処理
 def main():
@@ -48,7 +57,7 @@ def main():
     driver.get("https://tenshoku.mynavi.jp/")
     time.sleep(5)
     try:
-        # ポップアップを閉じる
+        # ポップアップを閉じる（seleniumだけではクローズできない）
         driver.execute_script('document.querySelector(".karte-close").click()')
         time.sleep(5)
         # ポップアップを閉じる
@@ -65,6 +74,7 @@ def main():
     exp_name_list = []
     exp_copy_list = []
     exp_status_list = []
+    exp_first_year_fee_list = []
     count = 0
     success = 0
     fail = 0
@@ -73,19 +83,26 @@ def main():
         name_list = driver.find_elements_by_css_selector(".cassetteRecruit__heading .cassetteRecruit__name")
         copy_list = driver.find_elements_by_css_selector(".cassetteRecruit__heading .cassetteRecruit__copy")
         status_list = driver.find_elements_by_css_selector(".cassetteRecruit__heading .labelEmploymentStatus")
+        table_list = driver.find_elements_by_css_selector(".cassetteRecruit .tableCondition") # 初年度年収
+        
         # 1ページ分繰り返し
-        for name, copy, status in zip(name_list, copy_list, status_list):
+        for name, copy, status, table in zip(name_list, copy_list, status_list,table_list):
             try:
+                # try~exceptはエラーの可能性が高い箇所に配置
                 exp_name_list.append(name.text)
                 exp_copy_list.append(copy.text)
                 exp_status_list.append(status.text)
-                log("{}件目成功 : {}".format(count,name.text))
+                # 初年度年収をtableから探す
+                first_year_fee = find_table_target_word(table.find_elements_by_tag_name("th"), table.find_elements_by_tag_name("td"), "初年度年収")
+                exp_first_year_fee_list.append(first_year_fee)
+                log(f"{count}件目成功 : {name.text}")
                 success+=1
             except Exception as e:
-                log("{}件目失敗 : {}".format(count,name.text))
+                log(f"{count}件目失敗 : {name.text}")
                 log(e)
                 fail+=1
             finally:
+                # finallyは成功でもエラーでも必ず実行
                 count+=1
 
         # 次のページボタンがあればクリックなければ終了
@@ -101,9 +118,11 @@ def main():
     now = datetime.datetime.now().strftime('%Y-%m-%d-%H-%M-%S')
     df = pd.DataFrame({"企業名":exp_name_list,
                        "キャッチコピー":exp_copy_list,
-                       "ステータス":exp_status_list})
-    df.to_csv(EXP_CSV_PATH.replace("###SEARCH_KEYWORD###",search_keyword).replace("###DATETIME###",now), encoding="utf-8-sig")
-    log("処理完了 成功件数: {} 件 / 失敗件数: {} 件".format(success,fail))
+                       "ステータス":exp_status_list,
+                       "初年度年収":exp_first_year_fee_list})
+    df.to_csv(EXP_CSV_PATH.format(search_keyword=search_keyword,datetime=
+                                  now), encoding="utf-8-sig")
+    log(f"処理完了 成功件数: {success} 件 / 失敗件数: {fail} 件")
     
 # 直接起動された場合はmain()を起動(モジュールとして呼び出された場合は起動しないようにするため)
 if __name__ == "__main__":
