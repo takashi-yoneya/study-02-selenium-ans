@@ -156,7 +156,8 @@ def main(is_option: bool = False, page_limit: int=5, hidden_chrome: bool=False):
 
         # 次のページボタンがあればリンクを取得して画面遷移、なければ終了
         next_page = driver.find_elements(by=By.CLASS_NAME, value="iconFont--arrowLeft")
-        if len(next_page) >= 1:
+        # if len(next_page) >= 1: # Python公式として非推奨の方式となったため変更
+        if next_page:
             next_page_link = next_page[0].get_attribute("href")
             driver.get(next_page_link)
         else:
