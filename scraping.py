@@ -113,8 +113,8 @@ def main(is_option: bool = False, page_limit: int=5, hidden_chrome: bool=False):
     count = 0
     success = 0
     fail = 0
-    df = pd.DataFrame()
     page = 1
+    recruits = []
     while page <= page_limit:
         # 求人の要素を丸ごと取得
         recruit_elms = driver.find_elements(by=By.CSS_SELECTOR, value=".cassetteRecruit")
@@ -138,21 +138,23 @@ def main(is_option: bool = False, page_limit: int=5, hidden_chrome: bool=False):
                 # 初年度年収をtableから探す
                 first_year_fee = find_table_col_by_header_name(table_elm.find_elements(by=By.TAG_NAME, value="th"), table_elm.find_elements(by=By.TAG_NAME, value="td"), "初年度年収")
                 # DataFrameにレコードを追加(辞書形式でセット)
-                df = df.append({"企業名": name,
-                                "キャッチコピー": copy,
-                                "ステータス": employment_status,
-                                "初年度年収": first_year_fee},
-                                ignore_index=True)
+                recruits.append(
+                    {
+                        "企業名": name,
+                        "キャッチコピー": copy,
+                        "ステータス": employment_status,
+                        "初年度年収": first_year_fee
+                    }
+                )
                 log(f"[成功]{count} 件目 (page: {page}) : {name}")
                 success+=1
             except Exception as e:
-                log(f"[失敗]{count} 件目 (page: {page}): {name}")
+                log(f"[失敗]{count} 件目 (page: {page})")
                 log(e)
                 fail+=1
             finally:
                 # finallyは成功でもエラーでも必ず実行
                 count+=1
-
 
         # 次のページボタンがあればリンクを取得して画面遷移、なければ終了
         next_page = driver.find_elements(by=By.CLASS_NAME, value="iconFont--arrowLeft")
@@ -170,6 +172,8 @@ def main(is_option: bool = False, page_limit: int=5, hidden_chrome: bool=False):
     now = datetime.datetime.now().strftime('%Y-%m-%d-%H-%M-%S')
     # csv出力（encodingはWindowsのExcelの文字化け防止のためにutf-8-sig(BOM付きUTF8)とする
     makedir_for_filepath(EXP_CSV_PATH)
+    # df.appendは非推奨になったため、from_dictを使用する
+    df = pd.DataFrame.from_dict(recruits, dtype=object)
     df.to_csv(EXP_CSV_PATH.format(search_keyword=search_keyword, datetime=now), encoding="utf-8-sig")
     
     # ログの役割は、開発時や後からプログラムの動作をチェックするために用いる
